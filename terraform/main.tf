@@ -14,7 +14,7 @@ module "hospital_it_infrastructure" {
   control_tower_parameters = {
     AccountEmail              = "vindexinvestmentsolutions+hospital-it@gmail.com"
     AccountName               = "MercyGen-IT-Infrastructure"
-    ManagedOrganizationalUnit = "Sandbox"
+    ManagedOrganizationalUnit = "Prod_ Workloads"
     SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
     SSOUserFirstName          = "John"
     SSOUserLastName           = "Nguyen"
@@ -46,7 +46,7 @@ module "hospital_ehr" {
   control_tower_parameters = {
     AccountEmail              = "vindexinvestmentsolutions+hospital-ehr@gmail.com"
     AccountName               = "MercyGen-EHR-Systems"
-    ManagedOrganizationalUnit = "Sandbox"
+    ManagedOrganizationalUnit = "Prod_ Workloads"
     SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
     SSOUserFirstName          = "Sarah"
     SSOUserLastName           = "Chen"
@@ -79,7 +79,7 @@ module "hospital_imaging" {
   control_tower_parameters = {
     AccountEmail              = "vindexinvestmentsolutions+hospital-imaging@gmail.com"
     AccountName               = "MercyGen-Medical-Imaging"
-    ManagedOrganizationalUnit = "Sandbox"
+    ManagedOrganizationalUnit = "Prod_ Workloads"
     SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
     SSOUserFirstName          = "David"
     SSOUserLastName           = "Park"
@@ -112,7 +112,7 @@ module "hospital_billing" {
   control_tower_parameters = {
     AccountEmail              = "vindexinvestmentsolutions+hospital-billing@gmail.com"
     AccountName               = "MercyGen-Billing"
-    ManagedOrganizationalUnit = "Sandbox"
+    ManagedOrganizationalUnit = "Prod_ Workloads"
     SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
     SSOUserFirstName          = "Maria"
     SSOUserLastName           = "Rodriguez"
@@ -145,7 +145,7 @@ module "hospital_lab" {
   control_tower_parameters = {
     AccountEmail              = "vindexinvestmentsolutions+hospital-lab@gmail.com"
     AccountName               = "MercyGen-Lab-Pathology"
-    ManagedOrganizationalUnit = "Sandbox"
+    ManagedOrganizationalUnit = "Prod_ Workloads"
     SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
     SSOUserFirstName          = "James"
     SSOUserLastName           = "Williams"
@@ -178,7 +178,7 @@ module "hospital_pharmacy" {
   control_tower_parameters = {
     AccountEmail              = "vindexinvestmentsolutions+hospital-pharmacy@gmail.com"
     AccountName               = "MercyGen-Pharmacy"
-    ManagedOrganizationalUnit = "Sandbox"
+    ManagedOrganizationalUnit = "Prod_ Workloads"
     SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
     SSOUserFirstName          = "Lisa"
     SSOUserLastName           = "Thompson"
@@ -211,7 +211,7 @@ module "hospital_hr" {
   control_tower_parameters = {
     AccountEmail              = "vindexinvestmentsolutions+hospital-hr@gmail.com"
     AccountName               = "MercyGen-HR-Workforce"
-    ManagedOrganizationalUnit = "Sandbox"
+    ManagedOrganizationalUnit = "Prod_ Workloads"
     SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
     SSOUserFirstName          = "Michael"
     SSOUserLastName           = "Johnson"
@@ -244,7 +244,7 @@ module "hospital_research" {
   control_tower_parameters = {
     AccountEmail              = "vindexinvestmentsolutions+hospital-research@gmail.com"
     AccountName               = "MercyGen-Research"
-    ManagedOrganizationalUnit = "Sandbox"
+    ManagedOrganizationalUnit = "Prod_ Workloads"
     SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
     SSOUserFirstName          = "Emily"
     SSOUserLastName           = "Watson"
@@ -277,7 +277,7 @@ module "hospital_devtest" {
   control_tower_parameters = {
     AccountEmail              = "vindexinvestmentsolutions+hospital-devtest@gmail.com"
     AccountName               = "MercyGen-DevTest"
-    ManagedOrganizationalUnit = "Sandbox"
+    ManagedOrganizationalUnit = "Prod_ Workloads"
     SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
     SSOUserFirstName          = "Kevin"
     SSOUserLastName           = "Lee"
@@ -310,7 +310,7 @@ module "hospital_disaster_recovery" {
   control_tower_parameters = {
     AccountEmail              = "vindexinvestmentsolutions+hospital-dr@gmail.com"
     AccountName               = "MercyGen-Disaster-Recovery"
-    ManagedOrganizationalUnit = "Sandbox"
+    ManagedOrganizationalUnit = "Prod_ Workloads"
     SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
     SSOUserFirstName          = "Rachel"
     SSOUserLastName           = "Kim"
