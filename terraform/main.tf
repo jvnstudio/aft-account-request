@@ -1,19 +1,47 @@
 # =============================================================================
-# Mercy General Hospital - AWS Account Factory Demo
+# Mercy General Hospital - AWS Multi-Account Architecture
 # =============================================================================
-# Each module block represents a department/team AWS account.
-# Push changes to this repo to trigger account creation via AFT pipeline.
+# 5 accounts, each with a distinct security boundary and compliance reason.
+# OracleDB@AWS sits in Shared Services (hub). Spoke accounts connect via
+# Transit Gateway over private endpoints. One git push, five accounts,
+# HIPAA guardrails enforced automatically.
+#
+# Architecture:
+#
+#   [Shared Services]  ← Transit Gateway hub, OracleDB@AWS endpoint, DNS
+#         |
+#    ┌────┼────┬────────┐
+#    |    |    |        |
+#  [EHR] [Billing] [Research] [Dev/Test]
+#
+# Data flow:
+#   Patient arrives → EHR writes clinical DB (Oracle)
+#                   → Billing reads diagnosis codes (Oracle, separate schema)
+#                   → Research gets de-identified extract (SCP blocks PHI)
+#                   → Dev/Test uses synthetic data only (zero PHI)
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# 1. IT Infrastructure - Core hospital IT systems and shared services
+# 1. Shared Services (Hub)
 # -----------------------------------------------------------------------------
-module "hospital_it_infrastructure" {
+# WHY SEPARATE: This is the hub. Transit Gateway, OracleDB@AWS private
+# endpoint, Route 53 private hosted zones, and centralized secrets all live
+# here. No application workloads run in this account -- it only routes
+# traffic and hosts the Oracle Exadata cluster endpoint.
+#
+# OracleDB@AWS databases hosted here:
+#   - clinical_db   (EHR patient records, vitals, orders)
+#   - financial_db  (billing, claims, revenue cycle)
+#   - research_db   (de-identified extracts, IRB-approved datasets)
+#   - hr_db         (employee records, credentialing, scheduling)
+#   - devtest_db    (synthetic data, no PHI)
+# -----------------------------------------------------------------------------
+module "shared_services" {
   source = "./modules/aft-account-request"
 
   control_tower_parameters = {
-    AccountEmail              = "vindexinvestmentsolutions+hospital-it@gmail.com"
-    AccountName               = "MercyGen-IT-Infrastructure"
+    AccountEmail              = "vindexinvestmentsolutions+hospital-shared@gmail.com"
+    AccountName               = "MercyGen-Shared-Services"
     ManagedOrganizationalUnit = "Prod_ Workloads"
     SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
     SSOUserFirstName          = "John"
@@ -21,31 +49,39 @@ module "hospital_it_infrastructure" {
   }
 
   account_tags = {
-    Environment = "production"
-    ManagedBy   = "AFT"
-    Department  = "IT"
-    CostCenter  = "IT-001"
-    Compliance  = "HIPAA"
-    Owner       = "jvnstudio"
+    Environment  = "production"
+    ManagedBy    = "AFT"
+    Department   = "Infrastructure"
+    CostCenter   = "INFRA-001"
+    Compliance   = "HIPAA"
+    AccountRole  = "hub"
+    OracleDBAtAWS = "true"
+    Owner        = "jvnstudio"
   }
 
-  account_customizations_name = "hospital-production"
+  account_customizations_name = "hospital-shared-services"
 
   change_management_parameters = {
     change_requested_by = "John Nguyen"
-    change_reason       = "Hospital demo - core IT infrastructure account"
+    change_reason       = "Hub account - Transit Gateway, OracleDB@AWS endpoint, centralized DNS and secrets"
   }
 }
 
 # -----------------------------------------------------------------------------
-# 2. Electronic Health Records (EHR) - Patient data and clinical systems
+# 2. Electronic Health Records (EHR)
 # -----------------------------------------------------------------------------
-module "hospital_ehr" {
+# WHY SEPARATE: Strictest HIPAA controls. Contains PHI -- patient records,
+# vitals, medication orders, clinical notes. SCPs block all internet egress,
+# public S3, and unencrypted volumes. ECS app tier connects to clinical_db
+# in the hub via Transit Gateway on port 1522. This account can ONLY reach
+# its own Oracle schema (clinical.*) -- cannot query financial or HR data.
+# -----------------------------------------------------------------------------
+module "ehr_clinical" {
   source = "./modules/aft-account-request"
 
   control_tower_parameters = {
     AccountEmail              = "vindexinvestmentsolutions+hospital-ehr@gmail.com"
-    AccountName               = "MercyGen-EHR-Systems"
+    AccountName               = "MercyGen-EHR-Clinical"
     ManagedOrganizationalUnit = "Prod_ Workloads"
     SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
     SSOUserFirstName          = "Sarah"
@@ -59,6 +95,8 @@ module "hospital_ehr" {
     CostCenter  = "CS-002"
     Compliance  = "HIPAA"
     DataClass   = "PHI"
+    AccountRole = "spoke"
+    OracleSchema = "clinical"
     Owner       = "jvnstudio"
   }
 
@@ -66,47 +104,21 @@ module "hospital_ehr" {
 
   change_management_parameters = {
     change_requested_by = "Sarah Chen"
-    change_reason       = "Hospital demo - EHR and patient data systems"
+    change_reason       = "EHR account - patient records, clinical systems, strictest PHI controls"
   }
 }
 
 # -----------------------------------------------------------------------------
-# 3. Medical Imaging (PACS/Radiology) - DICOM storage and imaging AI
+# 3. Billing & Revenue Cycle
 # -----------------------------------------------------------------------------
-module "hospital_imaging" {
-  source = "./modules/aft-account-request"
-
-  control_tower_parameters = {
-    AccountEmail              = "vindexinvestmentsolutions+hospital-imaging@gmail.com"
-    AccountName               = "MercyGen-Medical-Imaging"
-    ManagedOrganizationalUnit = "Prod_ Workloads"
-    SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
-    SSOUserFirstName          = "David"
-    SSOUserLastName           = "Park"
-  }
-
-  account_tags = {
-    Environment = "production"
-    ManagedBy   = "AFT"
-    Department  = "Radiology"
-    CostCenter  = "RAD-003"
-    Compliance  = "HIPAA"
-    DataClass   = "PHI"
-    Owner       = "jvnstudio"
-  }
-
-  account_customizations_name = "hospital-production"
-
-  change_management_parameters = {
-    change_requested_by = "David Park"
-    change_reason       = "Hospital demo - PACS and medical imaging storage"
-  }
-}
-
+# WHY SEPARATE: Handles PII + financial data (PCI + HIPAA). Insurance claims,
+# patient billing, EOBs, EDI transactions. Needs to read diagnosis codes
+# from Oracle but through its OWN schema (financial.*) -- cannot query
+# clinical notes or HR records. S3 stores scanned claim documents, signed
+# PDFs, and EDI archives. Separate account because a billing clerk should
+# never be able to query patient clinical records.
 # -----------------------------------------------------------------------------
-# 4. Billing & Revenue Cycle - Insurance claims, patient billing
-# -----------------------------------------------------------------------------
-module "hospital_billing" {
+module "billing" {
   source = "./modules/aft-account-request"
 
   control_tower_parameters = {
@@ -122,9 +134,11 @@ module "hospital_billing" {
     Environment = "production"
     ManagedBy   = "AFT"
     Department  = "Finance"
-    CostCenter  = "FIN-004"
+    CostCenter  = "FIN-003"
     Compliance  = "HIPAA-PCI"
     DataClass   = "PII-Financial"
+    AccountRole = "spoke"
+    OracleSchema = "financial"
     Owner       = "jvnstudio"
   }
 
@@ -132,113 +146,21 @@ module "hospital_billing" {
 
   change_management_parameters = {
     change_requested_by = "Maria Rodriguez"
-    change_reason       = "Hospital demo - billing and revenue cycle management"
+    change_reason       = "Billing account - revenue cycle, claims processing, PCI + HIPAA financial isolation"
   }
 }
 
 # -----------------------------------------------------------------------------
-# 5. Lab & Pathology - Lab information systems, test results
+# 4. Research & Clinical Trials
 # -----------------------------------------------------------------------------
-module "hospital_lab" {
-  source = "./modules/aft-account-request"
-
-  control_tower_parameters = {
-    AccountEmail              = "vindexinvestmentsolutions+hospital-lab@gmail.com"
-    AccountName               = "MercyGen-Lab-Pathology"
-    ManagedOrganizationalUnit = "Prod_ Workloads"
-    SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
-    SSOUserFirstName          = "James"
-    SSOUserLastName           = "Williams"
-  }
-
-  account_tags = {
-    Environment = "production"
-    ManagedBy   = "AFT"
-    Department  = "Laboratory"
-    CostCenter  = "LAB-005"
-    Compliance  = "HIPAA-CLIA"
-    DataClass   = "PHI"
-    Owner       = "jvnstudio"
-  }
-
-  account_customizations_name = "hospital-production"
-
-  change_management_parameters = {
-    change_requested_by = "James Williams"
-    change_reason       = "Hospital demo - laboratory information systems"
-  }
-}
-
+# WHY SEPARATE: This is the account that proves the architecture works.
+# SCP explicitly DENIES any resource tagged DataClass=PHI. Researchers
+# can only access de-identified datasets in the research_db schema.
+# If someone tries to copy PHI into this account, the SCP blocks it.
+# This is how you pass a HIPAA audit for research -- prove that PHI
+# physically cannot enter the research environment.
 # -----------------------------------------------------------------------------
-# 6. Pharmacy - Medication management, drug interaction systems
-# -----------------------------------------------------------------------------
-module "hospital_pharmacy" {
-  source = "./modules/aft-account-request"
-
-  control_tower_parameters = {
-    AccountEmail              = "vindexinvestmentsolutions+hospital-pharmacy@gmail.com"
-    AccountName               = "MercyGen-Pharmacy"
-    ManagedOrganizationalUnit = "Prod_ Workloads"
-    SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
-    SSOUserFirstName          = "Lisa"
-    SSOUserLastName           = "Thompson"
-  }
-
-  account_tags = {
-    Environment = "production"
-    ManagedBy   = "AFT"
-    Department  = "Pharmacy"
-    CostCenter  = "RX-006"
-    Compliance  = "HIPAA"
-    DataClass   = "PHI"
-    Owner       = "jvnstudio"
-  }
-
-  account_customizations_name = "hospital-production"
-
-  change_management_parameters = {
-    change_requested_by = "Lisa Thompson"
-    change_reason       = "Hospital demo - pharmacy management systems"
-  }
-}
-
-# -----------------------------------------------------------------------------
-# 7. HR & Workforce - Employee records, scheduling, credentialing
-# -----------------------------------------------------------------------------
-module "hospital_hr" {
-  source = "./modules/aft-account-request"
-
-  control_tower_parameters = {
-    AccountEmail              = "vindexinvestmentsolutions+hospital-hr@gmail.com"
-    AccountName               = "MercyGen-HR-Workforce"
-    ManagedOrganizationalUnit = "Prod_ Workloads"
-    SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
-    SSOUserFirstName          = "Michael"
-    SSOUserLastName           = "Johnson"
-  }
-
-  account_tags = {
-    Environment = "production"
-    ManagedBy   = "AFT"
-    Department  = "Human-Resources"
-    CostCenter  = "HR-007"
-    Compliance  = "HIPAA"
-    DataClass   = "PII"
-    Owner       = "jvnstudio"
-  }
-
-  account_customizations_name = "hospital-production"
-
-  change_management_parameters = {
-    change_requested_by = "Michael Johnson"
-    change_reason       = "Hospital demo - HR and workforce management"
-  }
-}
-
-# -----------------------------------------------------------------------------
-# 8. Research & Clinical Trials - De-identified data, research workloads
-# -----------------------------------------------------------------------------
-module "hospital_research" {
+module "research" {
   source = "./modules/aft-account-request"
 
   control_tower_parameters = {
@@ -251,27 +173,35 @@ module "hospital_research" {
   }
 
   account_tags = {
-    Environment = "research"
-    ManagedBy   = "AFT"
-    Department  = "Research"
-    CostCenter  = "RES-008"
-    Compliance  = "HIPAA-IRB"
-    DataClass   = "De-identified"
-    Owner       = "jvnstudio"
+    Environment  = "research"
+    ManagedBy    = "AFT"
+    Department   = "Research"
+    CostCenter   = "RES-004"
+    Compliance   = "HIPAA-IRB"
+    DataClass    = "De-identified"
+    AccountRole  = "spoke"
+    OracleSchema = "research"
+    Owner        = "jvnstudio"
   }
 
   account_customizations_name = "hospital-research"
 
   change_management_parameters = {
     change_requested_by = "Emily Watson"
-    change_reason       = "Hospital demo - clinical research and trials"
+    change_reason       = "Research account - de-identified data only, SCP blocks PHI, IRB-approved workloads"
   }
 }
 
 # -----------------------------------------------------------------------------
-# 9. Dev/Test - Development and testing environment (non-production)
+# 5. Dev/Test
 # -----------------------------------------------------------------------------
-module "hospital_devtest" {
+# WHY SEPARATE: Developers need freedom to break things without risk to
+# production PHI. This account uses ONLY synthetic patient data -- generated,
+# not copied from production. SCPs enforce cost controls (no large instances,
+# no reserved capacity). Broader IAM permissions so devs can experiment,
+# but zero access to production Oracle schemas or S3 buckets.
+# -----------------------------------------------------------------------------
+module "devtest" {
   source = "./modules/aft-account-request"
 
   control_tower_parameters = {
@@ -284,52 +214,21 @@ module "hospital_devtest" {
   }
 
   account_tags = {
-    Environment = "development"
-    ManagedBy   = "AFT"
-    Department  = "IT"
-    CostCenter  = "IT-009"
-    Compliance  = "HIPAA"
-    DataClass   = "Synthetic"
-    Owner       = "jvnstudio"
+    Environment  = "development"
+    ManagedBy    = "AFT"
+    Department   = "Engineering"
+    CostCenter   = "ENG-005"
+    Compliance   = "HIPAA"
+    DataClass    = "Synthetic"
+    AccountRole  = "spoke"
+    OracleSchema = "devtest"
+    Owner        = "jvnstudio"
   }
 
   account_customizations_name = "hospital-dev"
 
   change_management_parameters = {
     change_requested_by = "Kevin Lee"
-    change_reason       = "Hospital demo - development and testing environment"
-  }
-}
-
-# -----------------------------------------------------------------------------
-# 10. Disaster Recovery - Backup systems, business continuity
-# -----------------------------------------------------------------------------
-module "hospital_disaster_recovery" {
-  source = "./modules/aft-account-request"
-
-  control_tower_parameters = {
-    AccountEmail              = "vindexinvestmentsolutions+hospital-dr@gmail.com"
-    AccountName               = "MercyGen-Disaster-Recovery"
-    ManagedOrganizationalUnit = "Prod_ Workloads"
-    SSOUserEmail              = "vindexinvestmentsolutions@gmail.com"
-    SSOUserFirstName          = "Rachel"
-    SSOUserLastName           = "Kim"
-  }
-
-  account_tags = {
-    Environment = "dr"
-    ManagedBy   = "AFT"
-    Department  = "IT"
-    CostCenter  = "IT-010"
-    Compliance  = "HIPAA"
-    DataClass   = "PHI-Backup"
-    Owner       = "jvnstudio"
-  }
-
-  account_customizations_name = "hospital-production"
-
-  change_management_parameters = {
-    change_requested_by = "Rachel Kim"
-    change_reason       = "Hospital demo - disaster recovery and business continuity"
+    change_reason       = "Dev/Test account - synthetic data only, cost controls, zero PHI access"
   }
 }
